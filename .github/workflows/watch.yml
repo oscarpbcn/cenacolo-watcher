@@ -1,0 +1,47 @@
+name: Vigilar Cenacolo Vinciano
+
+on:
+  schedule:
+    # Ritmo normal: cada hora, todos los días
+    - cron: "0 * * * *"
+    # Ritmo reforzado SOLO el miércoles 2 de septiembre, cada 5 minutos,
+    # entre las 11:00 y las 14:00 hora de España/Italia (09:00-11:59 UTC),
+    # que es cuando Vivaticket libera las entradas adicionales de la semana (12:00 hora Italia).
+    - cron: "*/5 9-11 2 9 *"
+  workflow_dispatch: {}  # permite lanzarlo manualmente desde la pestaña "Actions" de GitHub
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Descargar el repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instalar dependencias
+        run: |
+          pip install -r requirements.txt
+          playwright install --with-deps chromium
+
+      - name: Ejecutar comprobación
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
+        run: python check.py
+
+      - name: Guardar el estado para la próxima comprobación
+        run: |
+          git config user.name "cenacolo-watcher-bot"
+          git config user.email "actions@github.com"
+          git add state.json
+          git diff --quiet --cached || git commit -m "Actualiza estado [skip ci]"
+          git push
