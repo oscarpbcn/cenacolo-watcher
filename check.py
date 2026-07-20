@@ -31,28 +31,28 @@ IMPORTANTE — TIENES QUE AJUSTAR ESTO:
 """
 
 import os
-import re
 import json
-import sys
 import smtplib
 from email.mime.text import MIMEText
 from pathlib import Path
 
 from playwright.sync_api import sync_playwright
+from bs4 import BeautifulSoup
 
-# ---------------- CONFIGURACIÓN — EDITA ESTO ----------------
+# ---------------- CONFIGURACIÓN ----------------
 
 TARGET_URL = "https://cenacolovinciano.vivaticket.it/it/event/cenacolo-vinciano/151991"
 
 # Días del mes de septiembre 2026 que te interesan
 TARGET_DAYS = [7, 8, 9, 10, 11]
 
-# Ajusta este selector tras inspeccionar la página (ver instrucciones arriba).
-# Si lo dejas como None, el script analiza toda la página (menos preciso).
-CALENDAR_SELECTOR = None  # ej: ".calendar-grid"
+# Selector real del calendario en la web del Cenacolo Vinciano (confirmado inspeccionando la página)
+CALENDAR_SELECTOR = "#dayOfTheMonth_151991"
 
-# Palabras que sugieren que un día NO está disponible (ajusta si hace falta)
-UNAVAILABLE_HINTS = ["disabled", "sold-out", "soldout", "esaurito", "not-available", "unavailable"]
+# Clases reales que usa la web:
+#   "inactive"  -> sin plazas disponibles (title="Posti non disponibili")
+#   "no-event"  -> día cerrado / sin visitas programadas (ej. lunes, o domingo gratuito)
+# Si un día NO tiene ninguna de las dos, se interpreta como disponible.
 
 STATE_FILE = Path(__file__).parent / "state.json"
 
@@ -60,8 +60,7 @@ STATE_FILE = Path(__file__).parent / "state.json"
 
 
 def fetch_calendar_snapshot() -> dict:
-    """Abre la página con Playwright y devuelve un snapshot del estado de cada día objetivo."""
-    snapshot = {}
+    """Abre la página con Playwright y devuelve el estado real de cada día objetivo."""
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         page = browser.new_page(user_agent=(
@@ -71,32 +70,43 @@ def fetch_calendar_snapshot() -> dict:
         page.goto(TARGET_URL, wait_until="networkidle", timeout=60000)
         page.wait_for_timeout(3000)  # margen extra para JS lento
 
-        scope = page
-        if CALENDAR_SELECTOR:
-            try:
-                page.wait_for_selector(CALENDAR_SELECTOR, timeout=15000)
-                scope = page.locator(CALENDAR_SELECTOR)
-            except Exception:
-                print(f"[aviso] no se encontró el selector {CALENDAR_SELECTOR}, analizando toda la página")
+        try:
+            page.wait_for_selector(CALENDAR_SELECTOR, timeout=15000)
+            html = page.locator(CALENDAR_SELECTOR).inner_html()
+        except Exception:
+            print(f"[aviso] no se encontró el selector {CALENDAR_SELECTOR}, analizando toda la página")
+            html = page.content()
 
-        html = scope.inner_html() if CALENDAR_SELECTOR else page.content()
         browser.close()
 
-    for day in TARGET_DAYS:
-        # Busca fragmentos de HTML alrededor de cada número de día objetivo
-        matches = list(re.finditer(rf">\s*{day}\s*<", html))
-        day_frags = []
-        for m in matches:
-            start = max(0, m.start() - 300)
-            end = min(len(html), m.end() + 300)
-            day_frags.append(html[start:end])
+    soup = BeautifulSoup(html, "html.parser")
+    snapshot = {}
 
-        combined = " ".join(day_frags).lower()
-        looks_unavailable = any(hint in combined for hint in UNAVAILABLE_HINTS)
-        snapshot[str(day)] = {
-            "looks_unavailable": looks_unavailable,
-            "found": bool(day_frags),
+    for li in soup.find_all("li"):
+        text = li.get_text(strip=True)
+        if not text.isdigit():
+            continue
+        day_num = int(text)
+        if day_num not in TARGET_DAYS:
+            continue
+
+        classes = li.get("class", [])
+        is_unavailable = "inactive" in classes
+        is_closed = "no-event" in classes
+        is_available = not is_unavailable and not is_closed
+
+        snapshot[str(day_num)] = {
+            "looks_unavailable": is_unavailable,
+            "is_closed": is_closed,
+            "is_available": is_available,
+            "found": True,
         }
+
+    # Marca como "no encontrado" cualquier día objetivo que no apareciera en el calendario actual
+    for day in TARGET_DAYS:
+        snapshot.setdefault(str(day), {
+            "looks_unavailable": False, "is_closed": False, "is_available": False, "found": False,
+        })
 
     return snapshot
 
@@ -117,7 +127,8 @@ def detect_changes(previous: dict, current: dict) -> list:
         prev_info = previous.get(day)
         if prev_info is None:
             continue  # primera vez que vemos este día, no es un "cambio"
-        if prev_info.get("looks_unavailable") and not info.get("looks_unavailable"):
+        # Avisa si el día pasa de NO disponible a SÍ disponible
+        if not prev_info.get("is_available") and info.get("is_available"):
             changes.append(day)
     return changes
 
