@@ -1,19 +1,19 @@
 {
   "7": {
-    "looks_unavailable": false,
-    "is_closed": true,
+    "looks_unavailable": true,
+    "is_closed": false,
     "is_available": false,
     "found": true
   },
   "8": {
-    "looks_unavailable": false,
-    "is_closed": true,
+    "looks_unavailable": true,
+    "is_closed": false,
     "is_available": false,
     "found": true
   },
   "9": {
-    "looks_unavailable": false,
-    "is_closed": true,
+    "looks_unavailable": true,
+    "is_closed": false,
     "is_available": false,
     "found": true
   },
@@ -24,8 +24,8 @@
     "found": true
   },
   "11": {
-    "looks_unavailable": false,
-    "is_closed": true,
+    "looks_unavailable": true,
+    "is_closed": false,
     "is_available": false,
     "found": true
   }
