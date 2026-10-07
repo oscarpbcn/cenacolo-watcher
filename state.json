@@ -6,9 +6,9 @@
     "found": true
   },
   "8": {
-    "looks_unavailable": true,
+    "looks_unavailable": false,
     "is_closed": false,
-    "is_available": false,
+    "is_available": true,
     "found": true
   },
   "9": {
