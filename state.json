@@ -12,8 +12,8 @@
     "found": true
   },
   "9": {
-    "looks_unavailable": true,
-    "is_closed": false,
+    "looks_unavailable": false,
+    "is_closed": true,
     "is_available": false,
     "found": true
   },
