@@ -2,8 +2,8 @@
   "7": {
     "looks_unavailable": false,
     "is_closed": false,
-    "is_available": false,
-    "found": false
+    "is_available": true,
+    "found": true
   },
   "8": {
     "looks_unavailable": false,
